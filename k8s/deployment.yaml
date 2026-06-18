@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: claims-status-aks
+  labels:
+    app: claims-status-aks
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: claims-status-aks
+  template:
+    metadata:
+      labels:
+        app: claims-status-aks
+    spec:
+      containers:
+        - name: claims-status-aks
+          # Replace <ACR_NAME> with your actual Azure Container Registry name
+          # once it exists (Stage 5). e.g. myacrname.azurecr.io/claims-status-aks:latest
+          image: <ACR_NAME>.azurecr.io/claims-status-aks:latest
+          ports:
+            - containerPort: 3000
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 20
