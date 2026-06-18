@@ -18,7 +18,7 @@ spec:
         - name: claims-status-aks
           # Replace <ACR_NAME> with your actual Azure Container Registry name
           # once it exists (Stage 5). e.g. myacrname.azurecr.io/claims-status-aks:latest
-          image: <ACR_NAME>.azurecr.io/claims-status-aks:latest
+          image: acrclaimsstatus110587.azurecr.io/claims-status-aks:latest
           ports:
             - containerPort: 3000
           resources:
