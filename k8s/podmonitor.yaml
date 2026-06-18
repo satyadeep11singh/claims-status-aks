@@ -1,0 +1,13 @@
+apiVersion: azmonitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: claims-status-monitor
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: claims-status-aks
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

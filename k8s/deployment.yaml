@@ -20,7 +20,8 @@ spec:
           # once it exists (Stage 5). e.g. myacrname.azurecr.io/claims-status-aks:latest
           image: acrclaimsstatus110587.azurecr.io/claims-status-aks:latest
           ports:
-            - containerPort: 3000
+            - name: http
+              containerPort: 3000
           resources:
             requests:
               cpu: "100m"
