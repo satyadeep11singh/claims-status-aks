@@ -42,10 +42,11 @@ monitor in Grafana beyond generic infrastructure stats.
 
 ![Architecture diagram](./docs/screenshots/architecture-diagram.png)
 
-**Flow:** Node.js app (Express + SQLite) → Docker image → Azure Container Registry
-→ Azure Kubernetes Service (single-node cluster) → exposed via a LoadBalancer Service
-→ scraped by Azure Managed Prometheus → visualized in Azure Managed Grafana, with
-Azure Monitor (Container Insights) providing cluster-level health visibility.
+**Flow:** Code pushed to GitHub → **Azure DevOps Build Pipeline** builds the Docker
+image and pushes it to Azure Container Registry → **Azure DevOps Release Pipeline**
+applies the Kubernetes manifests to deploy it to AKS → exposed via a LoadBalancer
+Service → scraped by Azure Managed Prometheus → visualized in Azure Managed Grafana,
+with Azure Monitor (Container Insights) providing cluster-level health visibility.
 
 | Layer | Technology |
 |---|---|
@@ -53,9 +54,26 @@ Azure Monitor (Container Insights) providing cluster-level health visibility.
 | Database | SQLite (`node:sqlite`, bundled in-container) |
 | Metrics | `prom-client`, custom counters + histogram |
 | Containerization | Docker (multi-arch build, ARM64 for AKS node) |
+| CI/CD | Azure DevOps Pipelines (separate Build and Release pipelines) |
 | Registry | Azure Container Registry (Basic SKU) |
 | Orchestration | Azure Kubernetes Service (1-node, Standard_B2ps_v2) |
 | Monitoring | Azure Monitor, Azure Managed Prometheus, Azure Managed Grafana |
+
+### CI/CD pipelines
+
+This project uses two separate Azure DevOps pipelines, matching the two distinct
+concerns of build and deploy:
+
+- **Build Pipeline** ([`azure-pipelines-build.yml`](./azure-pipelines-build.yml)) —
+  triggers on push to `main` (when files under `app/` change), builds the Docker
+  image using Buildx for `linux/arm64` (to match the AKS node architecture), and
+  pushes it to Azure Container Registry.
+- **Release Pipeline** ([`azure-pipelines-release.yml`](./azure-pipelines-release.yml)) —
+  triggered manually rather than automatically. It applies `k8s/deployment.yaml`
+  and `k8s/service.yaml` to the AKS cluster and confirms the resulting service's
+  external IP. It's manual by design: since the AKS cluster is torn down between
+  practice sessions, an auto-triggered deploy would simply fail whenever the
+  cluster doesn't currently exist.
 
 ---
 
@@ -71,6 +89,11 @@ observability — the core skills the underlying exercise was designed to teach.
 ---
 
 ## Screenshots
+
+**CI/CD pipelines (Azure DevOps):**
+![Build pipeline run](./docs/screenshots/devops-build-pipeline-run.png)
+![Release pipeline run](./docs/screenshots/devops-release-pipeline-run.png)
+![Pods deployed by the release pipeline](./docs/screenshots/pipeline-deployed-pods.png)
 
 **Live deployment on AKS:**
 ![Pods running](./docs/screenshots/kubectl-pods-running.png)
@@ -91,20 +114,29 @@ see "Running this yourself" below for why there's no permanent live link.)*
 ## Running this yourself
 
 Full provisioning commands are documented in [`docs/provisioning-notes.md`](./docs/provisioning-notes.md).
-At a high level:
+
+**Infrastructure setup** (resource group, ACR, AKS) is done manually via Azure CLI,
+since this is the foundational infrastructure the pipelines deploy onto:
 
 ```bash
-# 1. Build and push the image to ACR
-docker buildx build --platform linux/arm64 -t <acr-name>.azurecr.io/claims-status-aks:latest --push ./app
-
-# 2. Create the AKS cluster, attached to ACR
+az group create --name <rg> --location <region>
+az acr create --resource-group <rg> --name <acr-name> --sku Basic
 az aks create --resource-group <rg> --name <cluster> --node-count 1 \
   --node-vm-size Standard_B2ps_v2 --attach-acr <acr-name> --generate-ssh-keys
+```
 
-# 3. Deploy
-kubectl apply -f k8s/
+**Build and deploy** are then handled by the two Azure DevOps pipelines:
 
-# 4. Enable monitoring (Azure Monitor workspace + Managed Grafana must exist first)
+1. Push a change under `app/` to `main` → the **Build Pipeline** automatically
+   builds the image and pushes it to ACR.
+2. Run the **Release Pipeline** manually → it applies the manifests in `k8s/`
+   to the AKS cluster.
+
+**Monitoring** (Azure Monitor workspace + Managed Grafana) is wired up manually,
+since it only needs to be set up once per practice session and isn't part of the
+build/deploy loop:
+
+```bash
 az aks update --resource-group <rg> --name <cluster> --enable-azure-monitor-metrics \
   --azure-monitor-workspace-resource-id <id> --grafana-resource-id <id>
 ```
@@ -144,14 +176,13 @@ budget, so cost control was treated as a real design constraint, not an aftertho
 
 - Swap SQLite for a real managed database (Azure SQL or Cosmos DB) to practice
   cross-service networking and connection security
-- Add a CI/CD pipeline (Azure DevOps or GitHub Actions) to automate the build-and-push
-  step instead of running it manually
 - Add ingress with TLS instead of exposing the service directly via a LoadBalancer IP
 - Add a claim status *history* (audit trail of status changes over time) rather than
   just the current status
 - Multi-node cluster with pod autoscaling, to practice load-based scaling behavior
-- Infrastructure as Code (Terraform) instead of manual `az` CLI commands — planned
-  for a later project in this series
+- Infrastructure as Code (Terraform) instead of manual `az` CLI commands for the
+  base infrastructure setup — planned for a later project in this series
+- Add automated tests to the Build Pipeline before the image build step
 
 ---
 
