@@ -1,0 +1,46 @@
+# Release Pipeline — deploys the application to AKS using the Kubernetes manifests
+# already in this repo (k8s/deployment.yaml, k8s/service.yaml).
+# Place this file in the repo root as azure-pipelines-release.yml, then create a
+# new pipeline in Azure DevOps pointing at this file.
+#
+# This pipeline does NOT trigger automatically on push — it's meant to be run
+# manually (or chained after the Build pipeline) so a deploy only happens when
+# you actually have a live AKS cluster to deploy to. Since this project is torn
+# down between practice sessions, an automatic trigger here would fail whenever
+# the cluster doesn't exist.
+trigger: none
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  azureSubscriptionConnection: 'azure-claims-connection'
+  resourceGroup: 'rg-claims-aks-demo'
+  kubernetesCluster: 'aks-claims-demo'
+
+stages:
+  - stage: Deploy
+    displayName: Deploy to AKS
+    jobs:
+      - job: Deploy
+        displayName: Apply Kubernetes manifests
+        steps:
+          - task: Kubernetes@1
+            displayName: Apply deployment and service manifests
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: $(azureSubscriptionConnection)
+              azureResourceGroup: $(resourceGroup)
+              kubernetesCluster: $(kubernetesCluster)
+              command: apply
+              arguments: '-f k8s/deployment.yaml -f k8s/service.yaml'
+
+          - task: Kubernetes@1
+            displayName: Get service (confirm external IP)
+            inputs:
+              connectionType: 'Azure Resource Manager'
+              azureSubscriptionEndpoint: $(azureSubscriptionConnection)
+              azureResourceGroup: $(resourceGroup)
+              kubernetesCluster: $(kubernetesCluster)
+              command: get
+              arguments: 'service claims-status-aks'
